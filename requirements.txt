@@ -1,0 +1,8 @@
+pymongo
+certifi
+python-dotenv
+leetscrape
+beautifulsoup4
+requests
+tqdm
+
