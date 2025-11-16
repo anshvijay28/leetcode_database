@@ -1,16 +1,13 @@
 import getpass
 import os
-import sys
 import time
-from pathlib import Path
-from typing import Any
 from dotenv import load_dotenv
 from tqdm import tqdm
 import pymongo
 import certifi
 from anthropic import Anthropic
-from utils import extract_constraints_and_followup
-from summary_prompt import SUMMARY_GENERATION_PROMPT
+from utils.utils import extract_constraints_and_followup
+from summarize.summary_prompt import SUMMARY_GENERATION_PROMPT
 
 load_dotenv()
 
