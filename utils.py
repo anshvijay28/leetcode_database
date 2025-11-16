@@ -1,6 +1,8 @@
 from leetscrape import GetQuestion
 from bs4 import BeautifulSoup
 import requests
+import re
+from typing import Optional, Tuple
 
 
 def getSlugs():
@@ -72,3 +74,57 @@ def getJsonObjFromQuestion(slug):
         "question_body": question_body,
         "is_premium_question": question.isPaidOnly,
     }
+
+
+def extract_constraints_and_followup(question_body: str) -> Tuple[str, Optional[str], Optional[str]]:
+    """
+    Extract constraints and follow-up sections from a LeetCode question body.
+    
+    Args:
+        question_body: The full question body text
+        
+    Returns:
+        A tuple of (main_question, constraints, follow_up) where:
+        - main_question: The question text without constraints and follow-up
+        - constraints: The constraints section (None if not found)
+        - follow_up: The follow-up section (None if not found)
+    """
+    if not question_body:
+        return question_body, None, None
+    
+    constraints = None
+    follow_up = None
+    main_question = question_body
+    
+    # Find the positions of Constraints and Follow-up sections
+    # Handle both regular spaces and non-breaking spaces (\xa0)
+    constraints_start = re.search(r'Constraints:?[\s\xa0]*\n?', question_body, re.IGNORECASE)
+    follow_up_start = re.search(r'Follow-up:[\s\xa0]*', question_body, re.IGNORECASE)
+    
+    if constraints_start:
+        # Extract everything from Constraints onwards
+        constraints_and_after = question_body[constraints_start.end():]
+        
+        if follow_up_start and follow_up_start.start() > constraints_start.start():
+            # Follow-up exists after Constraints
+            # Extract constraints (everything before Follow-up)
+            constraints = constraints_and_after[:follow_up_start.start() - constraints_start.end()].strip()
+            
+            # Extract follow-up (everything after "Follow-up:")
+            follow_up_text = question_body[follow_up_start.end():].strip()
+            follow_up = follow_up_text
+            
+            # Remove both Constraints and Follow-up from main question
+            main_question = question_body[:constraints_start.start()].strip()
+        else:
+            # No Follow-up, just Constraints
+            constraints = constraints_and_after.strip()
+            # Remove Constraints from main question
+            main_question = question_body[:constraints_start.start()].strip()
+    elif follow_up_start:
+        # Only Follow-up exists (no Constraints)
+        follow_up = question_body[follow_up_start.end():].strip()
+        # Remove Follow-up from main question
+        main_question = question_body[:follow_up_start.start()].strip()
+    
+    return main_question, constraints, follow_up
