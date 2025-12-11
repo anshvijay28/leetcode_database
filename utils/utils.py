@@ -2,9 +2,12 @@ from leetscrape import GetQuestion
 from bs4 import BeautifulSoup
 import requests
 import re
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 from PIL import Image
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def getSlugs():
@@ -205,3 +208,66 @@ def split_image_into_tiles(image_path: str, max_dimension: int = 8000, overlap: 
         import traceback
         traceback.print_exc()
         raise
+
+
+def extract_qid_from_custom_id(custom_id: str) -> Optional[int]:
+    """
+    Extract QID from custom_id string (e.g., "qid-42" -> 42).
+    
+    Args:
+        custom_id: Custom ID string in format "qid-{number}"
+    
+    Returns:
+        QID as integer, or None if invalid
+    """
+    if not custom_id or not custom_id.startswith('qid-'):
+        return None
+    
+    try:
+        return int(custom_id.replace('qid-', ''))
+    except ValueError:
+        logger.warning(f"Error extracting QID from custom_id '{custom_id}'")
+        return None
+
+
+def extract_summary_from_result(result_data: Dict, qid: int) -> Optional[str]:
+    """
+    Extract summary text from OpenAI batch API result data.
+    
+    Args:
+        result_data: Parsed JSON result from batch API
+        qid: Question ID for logging purposes
+    
+    Returns:
+        Summary text string, or None if not found
+    """
+    try:
+        response = result_data.get('response', {})
+        if not response:
+            logger.debug(f"No response found for QID {qid}")
+            return None
+        
+        body = response.get('body', {})
+        if not body:
+            logger.debug(f"No body found in response for QID {qid}")
+            return None
+        
+        output = body.get('output', [])
+        if not output or not isinstance(output, list) or len(output) == 0:
+            logger.debug(f"No output found in body for QID {qid}")
+            return None
+        
+        content = output[1].get('content', [])
+        if not content or not isinstance(content, list) or len(content) == 0:
+            logger.debug(f"No content found in output for QID {qid}")
+            return None
+        
+        summary = content[0].get('text', '')
+        if not summary:
+            logger.debug(f"Empty summary for QID {qid}")
+        
+        return summary if summary else None
+        
+    except (KeyError, IndexError, TypeError) as e:
+        logger.warning(f"Error extracting summary for QID {qid}: {e}")
+        return None

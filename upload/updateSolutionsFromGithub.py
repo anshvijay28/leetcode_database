@@ -86,8 +86,7 @@ def read_solution_file(file_path: str) -> Optional[str]:
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
-    except Exception as e:
-        print(f"  ⚠️  Error reading file {file_path}: {e}")
+    except Exception:
         return None
 
 
@@ -109,8 +108,7 @@ def collect_solutions_from_directory(problem_dir_path: str) -> Dict[str, List[st
     
     try:
         files = os.listdir(problem_dir_path)
-    except Exception as e:
-        print(f"  ⚠️  Error listing files in {problem_dir_path}: {e}")
+    except Exception:
         return solutions
     
     for filename in files:
@@ -203,8 +201,7 @@ def batch_update_solutions(all_solutions: Dict[int, Dict[str, List[str]]]) -> Di
         "C++": []
     }
     
-    print("\n📦 Preparing batch updates...")
-    for qid, langs in tqdm(all_solutions.items(), desc="Organizing solutions"):
+    for qid, langs in tqdm(all_solutions.items(), desc="Preparing updates"):
         for lang, code_list in langs.items():
             if code_list:
                 mongo_lang = MONGO_LANG_MAP[lang]
@@ -231,16 +228,14 @@ def batch_update_solutions(all_solutions: Dict[int, Dict[str, List[str]]]) -> Di
                 )
     
     # Execute batch updates
-    print("\n💾 Executing batch updates...")
     for lang, updates in batch_updates.items():
         if not updates:
             continue
         
-        print(f"\n📝 Processing {lang} solutions...")
         collection = collections[lang]
         
         # Process in batches
-        for i in tqdm(range(0, len(updates), BATCH_SIZE), desc=f"  Updating {lang}"):
+        for i in tqdm(range(0, len(updates), BATCH_SIZE), desc=f"Updating {lang}"):
             batch = updates[i:i + BATCH_SIZE]
             
             try:
@@ -249,69 +244,38 @@ def batch_update_solutions(all_solutions: Dict[int, Dict[str, List[str]]]) -> Di
                 stats[lang]["created"] += result.upserted_count
             except pymongo.errors.BulkWriteError as e:
                 # Handle partial failures
-                for error in e.details.get("writeErrors", []):
-                    stats[lang]["errors"] += 1
-                    print(f"  ⚠️  Error updating qid {error.get('op', {}).get('q', {}).get('qid', '?')}: {error.get('errmsg', 'Unknown error')}")
-                
-                # Count successful operations
+                stats[lang]["errors"] += len(e.details.get("writeErrors", []))
                 stats[lang]["updated"] += e.details.get("nModified", 0)
                 stats[lang]["created"] += len(e.details.get("upserted", []))
-            except Exception as e:
+            except Exception:
                 stats[lang]["errors"] += len(batch)
-                print(f"  ❌ Error in batch update for {lang}: {e}")
     
     return stats
 
 
-def verify_qid_matching(all_solutions: Dict[int, Dict[str, List[str]]]) -> None:
-    """
-    Verify that qid matching is correct by checking a few examples.
-    """
-    print("\n🔍 Verifying QID matching...")
-    
-    # Check first few problems
-    sample_qids = sorted(list(all_solutions.keys()))[:5]
-    
-    for qid in sample_qids:
-        langs = all_solutions[qid]
-        total_solutions = sum(len(codes) for codes in langs.values())
-        print(f"  QID {qid}: {total_solutions} solution(s) - Python: {len(langs['python'])}, Java: {len(langs['java'])}, C++: {len(langs['cpp'])}")
-    
-    print("✅ QID matching verification complete\n")
 
 
 def main():
     """Main function to update MongoDB with solutions from local repository."""
-    print("="*80)
-    print("🚀 UPDATING MONGODB WITH SOLUTIONS FROM LOCAL REPOSITORY")
-    print("="*80)
-    print(f"📁 Repository path: {REPO_PATH}")
-    print(f"📂 Top-level directory: {TOP_LEVEL_DIR}\n")
-    
-    # Construct full path to top-level directory
     top_level_path = os.path.join(REPO_PATH, TOP_LEVEL_DIR)
     
     if not os.path.exists(top_level_path):
-        print(f"❌ ERROR: Top-level directory does not exist: {top_level_path}")
-        print(f"   Please check the REPO_PATH and TOP_LEVEL_DIR variables")
+        print(f"❌ Error: Directory not found: {top_level_path}")
         return
     
     # Collect all solutions
-    print("🔍 Collecting solutions from repository...")
     all_solutions = {}
-    
     try:
         traverse_and_collect_solutions(top_level_path, all_solutions)
     except Exception as e:
-        print(f"❌ ERROR during solution collection: {e}")
+        print(f"❌ Error collecting solutions: {e}")
         import traceback
         traceback.print_exc()
         return
     
-    print(f"\n✅ Collected solutions for {len(all_solutions)} problems")
-    
-    # Verify QID matching
-    verify_qid_matching(all_solutions)
+    if not all_solutions:
+        print("❌ No solutions found")
+        return
     
     # Count solutions by language
     lang_counts = {"python": 0, "java": 0, "cpp": 0}
@@ -319,45 +283,27 @@ def main():
         for lang in lang_counts.keys():
             lang_counts[lang] += len(langs[lang])
     
-    print("📊 Solutions collected:")
-    print(f"   Python: {lang_counts['python']} solution(s)")
-    print(f"   Java: {lang_counts['java']} solution(s)")
-    print(f"   C++: {lang_counts['cpp']} solution(s)")
+    print(f"Found {len(all_solutions)} problems: Python: {lang_counts['python']}, Java: {lang_counts['java']}, C++: {lang_counts['cpp']}")
     
     # Ask for confirmation
-    response = input("\n⚠️  Proceed with updating MongoDB? (y/n): ").strip().lower()
+    response = input("Proceed with update? (y/n): ").strip().lower()
     if response != "y":
-        print("❌ Update cancelled by user")
+        print("Cancelled")
         return
     
     # Batch update MongoDB
     stats = batch_update_solutions(all_solutions)
     
     # Print summary
-    print("\n" + "="*80)
-    print("📊 UPDATE SUMMARY")
-    print("="*80)
-    
-    for lang in ["Python", "Java", "C++"]:
-        lang_stats = stats[lang]
-        print(f"\n{lang}:")
-        print(f"   ✅ Updated: {lang_stats['updated']} document(s)")
-        print(f"   ➕ Created: {lang_stats['created']} document(s)")
-        if lang_stats['errors'] > 0:
-            print(f"   ❌ Errors: {lang_stats['errors']}")
-    
     total_updated = sum(s["updated"] for s in stats.values())
     total_created = sum(s["created"] for s in stats.values())
     total_errors = sum(s["errors"] for s in stats.values())
     
-    print(f"\n📈 Overall:")
-    print(f"   ✅ Updated: {total_updated} document(s)")
-    print(f"   ➕ Created: {total_created} document(s)")
+    print(f"\nSummary: Updated: {total_updated}, Created: {total_created}", end="")
     if total_errors > 0:
-        print(f"   ❌ Errors: {total_errors}")
-    
-    print("="*80)
-    print("✅ Update complete!")
+        print(f", Errors: {total_errors}")
+    else:
+        print()
 
 
 if __name__ == "__main__":
