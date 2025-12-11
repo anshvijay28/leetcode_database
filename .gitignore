@@ -29,3 +29,6 @@ Thumbs.db
 logs/
 *.log
 
+# Random output files
+formatted_line.json
+
