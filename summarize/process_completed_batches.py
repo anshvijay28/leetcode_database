@@ -31,89 +31,6 @@ from summarize.batch_api import download_batch_results  # noqa: E402
 from summarize.summary_storage import batch_upload_summaries  # noqa: E402
 
 
-async def inspect_batch(batch_id: str, reprocess_missing: bool = True):
-    """
-    Inspect a specific batch, report which QIDs have summaries,
-    and optionally re-upload missing ones.
-    """
-    metadata = await batch_metadata_collection.find_one({"batch_id": batch_id})
-    if not metadata:
-        logger.error(f"Batch {batch_id} not found in metadata collection.")
-        return
-
-    qids = metadata.get("qids", [])
-    result_file_id = metadata.get("result_file_id")
-    status = metadata.get("status")
-    processed = metadata.get("processed", False)
-
-    logger.info("=" * 80)
-    logger.info(f"BATCH INSPECTION: {batch_id}")
-    logger.info("=" * 80)
-    logger.info(f"Status: {status}")
-    logger.info(f"Processed flag: {processed}")
-    logger.info(f"Total QIDs in batch: {len(qids)}")
-
-    if not qids:
-        logger.warning("No QIDs recorded for this batch.")
-        return
-
-    # Check summaries collection for these QIDs
-    existing_summaries = await summary_collection.find(
-        {"qid": {"$in": qids}}
-    ).to_list(length=None)
-    existing_qids = {doc["qid"] for doc in existing_summaries}
-    missing_qids = [qid for qid in qids if qid not in existing_qids]
-
-    logger.info(f"Summaries present: {len(existing_qids)}")
-    logger.info(f"Summaries missing: {len(missing_qids)}")
-
-    if not missing_qids:
-        logger.info("All summaries already exist for this batch.")
-        return
-
-    if not result_file_id:
-        logger.error(
-            "Batch is missing result_file_id; cannot re-download summaries."
-        )
-        return
-
-    if not reprocess_missing:
-        logger.info("Reprocess disabled. Skipping re-download.")
-        return
-
-    logger.info(
-        f"Re-downloading results for missing QIDs (count={len(missing_qids)})..."
-    )
-    results = await download_batch_results(batch_id, result_file_id)
-
-    if not results:
-        logger.error("No results returned from download; cannot upload.")
-        return
-
-    missing_results = {
-        qid: summary for qid, summary in results.items() if qid in missing_qids
-    }
-
-    if not missing_results:
-        logger.warning("Downloaded results do not contain the missing QIDs.")
-        return
-
-    logger.info(
-        f"Uploading {len(missing_results)} missing summaries to MongoDB..."
-    )
-    await batch_upload_summaries(missing_results)
-    logger.info("Upload complete.")
-
-    # Mark batch as processed if all QIDs now exist
-    total_existing = len(existing_qids) + len(missing_results)
-    if total_existing == len(qids):
-        await batch_metadata_collection.update_one(
-            {"batch_id": batch_id},
-            {"$set": {"processed": True}},
-        )
-        logger.info("Batch marked as processed.")
-
-
 async def process_all_completed():
     """
     Process all completed batches, including retrying batches marked as processed
@@ -186,23 +103,16 @@ async def main():
         description="Process or inspect completed batches."
     )
     parser.add_argument(
-        "--inspect",
+        "--process",
         metavar="BATCH_ID",
-        help="Inspect a specific batch ID and optionally re-upload missing summaries.",
-    )
-    parser.add_argument(
-        "--no-reprocess",
-        action="store_true",
-        help="When used with --inspect, skip re-downloading/re-uploading summaries.",
+        help="Process a specific batch ID completely (download and upload all summaries).",
     )
     args = parser.parse_args()
 
     try:
-        if args.inspect:
-            await inspect_batch(
-                args.inspect,
-                reprocess_missing=not args.no_reprocess,
-            )
+        if args.process:
+            logger.info(f"Processing batch {args.process}...")
+            await process_batch_results_async([args.process])
         else:
             await process_all_completed()
     finally:
