@@ -88,7 +88,7 @@ collections = {
 summary_collection = db["question_summaries"]
 
 # Batch metadata collection
-batch_metadata_collection = db["batch_metadata"]
+batch_metadata_collection = db["summaries_batch_metadata"]
 
 # ============================================================================
 # Batch API Configuration

@@ -170,8 +170,8 @@ async def main():
     Main function for command-line usage.
     Example: python upload_missing_problems.py 1 2 3 20 42
     """
-    qids = [20, 57, 394, 929, 941, 1251, 1283, 1308, 2886, 2982, 3256] 
-
+    qids = [1149, 2797, 1398]
+    
     await upload_missing_problems(qids)
 
 
