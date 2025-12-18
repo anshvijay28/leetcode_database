@@ -68,4 +68,39 @@ collections = {
     "cpp": db["cpp_solutions"],
     "summaries": db["question_summaries"],
     "batches": db["summaries_batch_metadata"],
+    "chunks": db["chunks"],
 }
+
+# Embeddings batch metadata collection
+embeddings_batch_metadata_collection = db["embeddings_batch_metadata"]
+
+# Embeddings file metadata collection (for tracking input file uploads)
+embeddings_file_metadata_collection = db["embeddings_file_metadata"]
+
+# ============================================================================
+# Embedding Model Configuration
+# ============================================================================
+EMBEDDING_MODEL = "text-embedding-3-large"
+EMBEDDING_DIMENSIONS = 1024
+
+# ============================================================================
+# Batch API Configuration
+# ============================================================================
+
+EMBEDDING_BATCH_SIZE = "5000"  # Number of chunks per batch
+MAX_CONCURRENT_EMBEDDING_BATCH_SUBMISSIONS = "2"
+EMBEDDING_POLL_INTERVAL = "60"  # Seconds between polling
+
+# ============================================================================
+# Pipeline Configuration
+# ============================================================================
+
+# Number of chunks to fetch per iteration (incremental processing)
+MAX_CHUNKS_PER_ITERATION = 10000
+
+# Concurrency limits for each pipeline stage
+MAX_CONCURRENT_FILE_UPLOADS = 5
+MAX_CONCURRENT_FILE_POLLING = 5
+MAX_CONCURRENT_BATCH_CREATIONS = 5
+MAX_CONCURRENT_BATCH_POLLING = 5
+MAX_CONCURRENT_EMBEDDING_UPLOADS = 5

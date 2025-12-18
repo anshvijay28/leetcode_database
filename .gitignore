@@ -31,4 +31,6 @@ logs/
 
 # Random output files
 formatted_line.json
+output_file_test_after_running_four_stage_pipeline.jsonl
+test.jsonl
 
